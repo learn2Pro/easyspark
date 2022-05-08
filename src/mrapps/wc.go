@@ -6,7 +6,7 @@ package main
 // go build -buildmode=plugin wc.go
 //
 
-import "6.824/mr"
+import "easyspark/mr"
 import "unicode"
 import "strings"
 import "strconv"
@@ -40,5 +40,10 @@ func Map(filename string, contents string) []mr.KeyValue {
 //
 func Reduce(key string, values []string) string {
 	// return the number of occurrences of this word.
-	return strconv.Itoa(len(values))
+	var cnt = 0
+	for _, item := range values {
+		ans, _ := strconv.Atoi(item)
+		cnt += ans
+	}
+	return strconv.Itoa(cnt)
 }

@@ -8,7 +8,7 @@ package main
 // go build -buildmode=plugin crash.go
 //
 
-import "6.824/mr"
+import "easyspark/mr"
 import "math/rand"
 import "strings"
 import "strconv"

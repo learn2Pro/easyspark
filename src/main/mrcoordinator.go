@@ -9,7 +9,7 @@ package main
 // Please do not change this file.
 //
 
-import "6.824/mr"
+import "easyspark/mr"
 import "time"
 import "os"
 import "fmt"
@@ -19,11 +19,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage: mrcoordinator inputfiles...\n")
 		os.Exit(1)
 	}
-
+	var WorkDir, _ = os.Getwd()
+	var TempFilePath = WorkDir + "/tmp"
 	m := mr.MakeCoordinator(os.Args[1:], 10)
 	for m.Done() == false {
 		time.Sleep(time.Second)
 	}
-
+	os.RemoveAll(TempFilePath)
 	time.Sleep(time.Second)
 }

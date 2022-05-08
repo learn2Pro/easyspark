@@ -15,15 +15,27 @@ import "strconv"
 //
 
 type ExampleArgs struct {
+	//sequence id
 	X int
+	//1=request a ask
+	//2=complete signal of mapper
+	//3=complete signal of reducer
+	RequestType int
+	TaskNo      int
 }
 
 type ExampleReply struct {
 	Y int
+	//1=map task
+	//2=reduce task
+	TaskType int
+	FilePath string
+	NReducer int
+	NMapper  int
+	TaskNo   int
 }
 
 // Add your RPC definitions here.
-
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.

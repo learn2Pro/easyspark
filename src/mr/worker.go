@@ -86,8 +86,7 @@ func DoMap(mapf func(string, string) []KeyValue, reducef func(string, []string) 
 	if err != nil {
 		log.Fatalf("read file:%v failed", filePath)
 	}
-	kvs := mapf(filePath, string(content))
-	DoSinkFile(mapperNo, nReducer, kvs, reducef)
+	SinkMapToFile(mapperNo, nReducer, mapf(filePath, string(content)))
 }
 
 func DoReduce(reducef func(string, []string) string, nMapper, reducerNo int) {
@@ -98,7 +97,6 @@ func DoReduce(reducef func(string, []string) string, nMapper, reducerNo int) {
 		name := fmt.Sprintf("%v/mr-%v-%v", TempFilePath, i, reducerNo)
 		partial, _ := os.Open(name)
 		contents, _ := ioutil.ReadAll(partial)
-		fmt.Printf("open file:%v\n", name)
 		ff := func(r rune) bool { return r == '\n' }
 
 		// split contents into an array of words.
@@ -109,10 +107,10 @@ func DoReduce(reducef func(string, []string) string, nMapper, reducerNo int) {
 		}
 	}
 	sort.Sort(SortKeyValue(kvs))
-	DoCombine(kvs, ofile, reducef)
+	CombineAndSink(kvs, ofile, reducef)
 }
 
-func DoSinkFile(mapperNo int, nReducer int, kvs []KeyValue, reducef func(string, []string) string) {
+func SinkMapToFile(mapperNo int, nReducer int, kvs []KeyValue) {
 	indexOfKvs := make(map[int][]KeyValue)
 	for _, item := range kvs {
 		reducerNo := ihash(item.Key) % nReducer
@@ -134,11 +132,11 @@ func DoSinkFile(mapperNo int, nReducer int, kvs []KeyValue, reducef func(string,
 		if err != nil {
 			log.Fatalf("Create Intermidiate File:%v failed!\nerr:%v", name, err)
 		}
-		sort.Sort(SortKeyValue(arr))
+		//sort.Sort(SortKeyValue(arr))
 		//combine
-		DoCombine(arr, ofile, reducef)
-		//rename after complete
-		//err = os.Rename(ofile.Name(), name)
+		for i, _ := range arr {
+			fmt.Fprintf(ofile, "%v %v\n", arr[i].Key, arr[i].Value)
+		}
 		if err != nil {
 			log.Fatalf("Rename File:%v To New:%v failed!", ofile.Name(), name)
 		}
@@ -148,7 +146,7 @@ func DoSinkFile(mapperNo int, nReducer int, kvs []KeyValue, reducef func(string,
 		}
 	}
 }
-func DoCombine(arr []KeyValue, ofile *os.File, reducef func(string, []string) string) {
+func CombineAndSink(arr []KeyValue, ofile *os.File, reducef func(string, []string) string) {
 	for i := 0; i < len(arr); {
 		j := i + 1
 		for ; j < len(arr) && arr[j].Key == arr[i].Key; j++ {
@@ -160,9 +158,9 @@ func DoCombine(arr []KeyValue, ofile *os.File, reducef func(string, []string) st
 		output := reducef(arr[i].Key, values)
 		//write to file
 		fmt.Fprintf(ofile, "%v %v\n", arr[i].Key, output)
+		//fmt.Printf()
 		i = j
 	}
-
 }
 
 //
@@ -179,7 +177,6 @@ func CallExample(args *ExampleArgs) (RpcStatus, ExampleReply) {
 	// send the RPC request, wait for the reply.
 	status := call("Coordinator.Example", args, &reply)
 	// reply.Y should be 100.
-	fmt.Printf("status:%v,reply.Y %v\n", status, reply.Y)
 	return RpcStatus(status) && reply.Y == args.X+1, reply
 }
 
@@ -197,7 +194,7 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 	}
 	defer c.Close()
 	err = c.Call(rpcname, args, reply)
-	fmt.Printf("call rpc:%v args:%v reply:%v", rpcname, args, reply)
+	//fmt.Printf("call rpc:%v args:%v reply:%v", rpcname, args, reply)
 	if err == nil {
 		return true
 	}

@@ -43,3 +43,7 @@ result will be like
 $
 
 ```
+# 2.1 lab2a
+```shell
+go test -run 2A -race
+```

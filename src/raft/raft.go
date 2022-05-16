@@ -266,11 +266,10 @@ func (rf *Raft) tryElection(expectTerm int32) {
 		}
 		beforeTerm := expectTerm + 1
 		fmt.Printf("server:%v term:%v to try election...\n", rf.me, beforeTerm)
-		voted := rf.sendElectionToAll(beforeTerm)
+		voted := rf.voteForGranted(beforeTerm)
 		rf.mu.Lock()
 		rf.votedFor = rf.me
-		afterTerm := rf.currentTerm
-		afterRole := rf.role
+		afterTerm, afterRole := rf.currentTerm, rf.role
 		if beforeTerm == afterTerm && afterRole == 2 && voted >= len(rf.peers)/2+1 {
 			if ok := rf.convertToRoleWithExpect(2, 1); !ok {
 				return
@@ -283,7 +282,7 @@ func (rf *Raft) tryElection(expectTerm int32) {
 	}
 }
 
-func (rf *Raft) sendElectionToAll(term int32) int {
+func (rf *Raft) voteForGranted(term int32) int {
 	voted := 1
 	if atomic.LoadInt32(&rf.role) == 2 {
 		chs := make(chan bool, len(rf.peers))
@@ -291,7 +290,7 @@ func (rf *Raft) sendElectionToAll(term int32) int {
 			if i == rf.me { //no need to self
 				continue
 			}
-			go rf.trySend(i, term, rf.me, chs)
+			go rf.trySendVote(i, term, rf.me, chs)
 		}
 		for range rf.peers {
 			select {
@@ -307,7 +306,7 @@ func (rf *Raft) sendElectionToAll(term int32) int {
 	return voted
 }
 
-func (rf *Raft) trySend(server int, term int32, cid int, ch chan bool) {
+func (rf *Raft) trySendVote(server int, term int32, cid int, ch chan bool) {
 	args := &RequestVoteArgs{
 		Term:        term,
 		CandidateId: cid,
@@ -460,9 +459,7 @@ func (rf *Raft) ticker() {
 		sleep := rf.tickDelay + int64(rand.Int31n(100)*1000*1000)
 		//fmt.Printf("server:%v sleep:%vms role:%v lastHeartbeat:%v for ticker!\n", rf.me, sleep/1000, rf.role, rf.lastHeartbeat)
 		time.Sleep(time.Duration(sleep)) //rand in [tickDelay,tickDelay+10)ms
-		rf.mu.Lock()
-		role, t, term := rf.role, rf.lastHeartbeat, rf.currentTerm
-		rf.mu.Unlock()
+		role, term, t := rf.getRoleTermAndLastTick()
 		if role != 1 && time.Now().UnixNano()-t > rf.heartbeatTimeout {
 			//convert to candidate=2
 			//fmt.Printf("server:%v,receive leader message timeout:%vms,try election...\n", rf.me, rf.heartbeatTimeout/1000)
@@ -474,6 +471,13 @@ func (rf *Raft) ticker() {
 		}
 
 	}
+}
+
+func (rf *Raft) getRoleTermAndLastTick() (int32, int32, int64) {
+	rf.mu.Lock()
+	role, t, term := rf.role, rf.lastHeartbeat, rf.currentTerm
+	rf.mu.Unlock()
+	return role, term, t
 }
 
 //

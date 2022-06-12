@@ -235,6 +235,9 @@ func (rf *Raft) GetLogEntry(i int) *LogEntry {
 	if rf.IsOutOfCurrRange(i) {
 		_, _, previous := rf.decodeSnapshot("GetRangeLogEntry")
 		return &previous[i]
+	} else if i-rf.snapshotStartIndex >= len(rf.logs) {
+		DPrintf("server:%v index out of range:%v len:%v logs:%v\n", rf.me, i-rf.snapshotStartIndex, len(rf.logs), rf.logs)
+		return nil
 	} else {
 		return &rf.logs[i-rf.snapshotStartIndex]
 	}
@@ -603,7 +606,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotReq, reply *InstallSnapshot
 		if found >= 0 { //found the index
 			//If existing log entry has same index and term as snapshot’s
 			//last included entry, retain log entries following it and reply
-			rf.logs = rf.logs[found:]
+			rf.logs = rf.logs[found+1:]
 		} else {
 			rf.logs = nil
 		}
@@ -728,7 +731,7 @@ func (rf *Raft) tryApplyEntries(msg string, leaderCommit int) {
 				break
 			}
 		}
-		DPrintf("%v => follower:%v apply from:%v to:%v,current len:%v,logs:%v!\n", msg, rf.me, rf.lastApplied, cur-1, rf.GetLogEntryLen(), rf.logs)
+		DPrintf("%v => follower:%v apply from:%v to:%v,current len:%v!\n", msg, rf.me, rf.lastApplied, cur-1, rf.GetLogEntryLen())
 		rf.lastApplied = cur - 1
 	}
 }
@@ -941,9 +944,9 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 			DPrintf("leader:%v,append to self index:%v,cmd:%v\n", rf.me, entry.Index, entry.Cmd)
 			rf.tryNotifyOthers(entry.Index)
 			//majority commitIndex
-			//if rf.IsLeader() {
-			rf.tryLeaderApply(false)
-			//}
+			if rf.IsLeader() {
+				rf.tryLeaderApply(false)
+			}
 			DPrintf("************************server:%v,term:%v,complete: try commitIndex:%v logs:%v************************\n", rf.me, rf.currentTerm, rf.commitIndex, rf.GetLogEntryLen())
 			rf.persist()
 			return entry.OuterIndex(), int(rf.currentTerm), isLeader
@@ -1111,11 +1114,14 @@ func (rf *Raft) tryInstallToOne(server int) {
 func (rf *Raft) tryLeaderApply(heartbeat bool) int {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	if !rf.IsLeader() {
+		return rf.commitIndex
+	}
 	//If there exists an N such that N > commitIndex, a majority
 	//of matchIndex[i] ≥ N, and log[N].term == currentTerm:
 	//set commitIndex = N (§5.3, §5.4).
 	if !heartbeat {
-		DPrintf("before apply => followers:%v,commitIndex:%v,applied:%v\n", rf.matchIndex, rf.commitIndex, rf.lastApplied)
+		DPrintf("before apply => leader:%v,followers:%v,commitIndex:%v,applied:%v\n", rf.me, rf.matchIndex, rf.commitIndex, rf.lastApplied)
 	}
 	for i := rf.commitIndex + 1; i <= maxOfSlice(rf.matchIndex); i++ {
 		var majority int
@@ -1130,15 +1136,15 @@ func (rf *Raft) tryLeaderApply(heartbeat bool) int {
 	}
 	for rf.lastApplied < rf.commitIndex {
 		entry := rf.GetLogEntry(rf.lastApplied + 1)
-		DPrintf("leader:%v to apply cmd:%v,logs:%v,lastApplied:%v!", rf.me, entry, rf.logs, rf.lastApplied)
 		if rf.ApplyCmd(entry, false) {
+			DPrintf("leader:%v to apply cmd:%v,lastApplied:%v!", rf.me, entry, rf.lastApplied)
 			rf.lastApplied += 1
 		} else {
 			break
 		}
 	}
 	if !heartbeat {
-		DPrintf("after apply => followers:%v,commitIndex:%v,applied:%v\n", rf.matchIndex, rf.commitIndex, rf.lastApplied)
+		DPrintf("after apply => leader:%v,followers:%v,commitIndex:%v,applied:%v\n", rf.me, rf.matchIndex, rf.commitIndex, rf.lastApplied)
 	}
 	return rf.commitIndex
 }

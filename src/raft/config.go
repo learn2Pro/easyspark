@@ -137,17 +137,17 @@ func (cfg *config) checkLogs(i int, m ApplyMsg) (string, bool) {
 	err_msg := ""
 	v := m.Command
 	for j := 0; j < len(cfg.logs); j++ {
-		if old, oldok := cfg.logs[j][m.CommandIndex]; oldok && old != v {
+		if old, oldok := cfg.logs[j][int(m.CommandIndex)]; oldok && old != v {
 			log.Printf("%v: log %v; server %v\n", i, cfg.logs[i], cfg.logs[j])
 			// some server has already committed a different value for this entry!
 			err_msg = fmt.Sprintf("commit index=%v server=%v %v != server=%v %v",
 				m.CommandIndex, i, m.Command, j, old)
 		}
 	}
-	_, prevok := cfg.logs[i][m.CommandIndex-1]
-	cfg.logs[i][m.CommandIndex] = v
-	if m.CommandIndex > cfg.maxIndex {
-		cfg.maxIndex = m.CommandIndex
+	_, prevok := cfg.logs[i][int(m.CommandIndex-1)]
+	cfg.logs[i][int(m.CommandIndex)] = v
+	if int(m.CommandIndex) > cfg.maxIndex {
+		cfg.maxIndex = int(m.CommandIndex)
 	}
 	return err_msg, prevok
 }
@@ -197,7 +197,7 @@ func (cfg *config) applierSnap(i int, applyCh chan ApplyMsg) {
 				lastApplied = m.SnapshotIndex
 			}
 			cfg.mu.Unlock()
-		} else if m.CommandValid && m.CommandIndex > lastApplied {
+		} else if m.CommandValid && int(m.CommandIndex) > lastApplied {
 			//DPrintf("apply %v lastApplied %v\n", m.CommandIndex, lastApplied)
 			cfg.mu.Lock()
 			err_msg, prevok := cfg.checkLogs(i, m)
@@ -211,7 +211,7 @@ func (cfg *config) applierSnap(i int, applyCh chan ApplyMsg) {
 				// keep reading after error so that Raft doesn't block
 				// holding locks...
 			}
-			lastApplied = m.CommandIndex
+			lastApplied = int(m.CommandIndex)
 			if (m.CommandIndex+1)%SnapShotInterval == 0 {
 				w := new(bytes.Buffer)
 				e := labgob.NewEncoder(w)
